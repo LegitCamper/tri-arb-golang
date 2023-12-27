@@ -1,91 +1,42 @@
 package platforms
 
-import (
-	"log"
-	"net/url"
-	"os"
-	"os/signal"
-	"time"
-
-	"github.com/gorilla/websocket"
-)
+import "github.com/gorilla/websocket"
 
 type Host struct {
 	User       string
 	UserPath   string
+	UserSubs   []string
 	Market     string
 	MarketPath string
+	MarketSubs []string
 	Scheme     string
-	TLS        bool
 }
 
 type Platform struct {
 	Host Host
+	// Coins
+	// Pairs
+	// stables
 }
 
+// ensure my broker structs are passble
+type Response interface {
+	GetMethod() string
+	GetId() int
+}
+type Request interface {
+	ToJson() []byte
+	Timestamp() int64
+	AddTimestamp()
+}
+
+// Interface to allow several Platform types (eg. Crypto.com)
 type Broker interface {
-	Get_platform() Platform
-}
-
-// Create one of a few platforms
-func Create(b Broker) {
-	log.SetFlags(0)
-	host := b.Get_platform().Host
-
-	interrupt := make(chan os.Signal, 1)
-	signal.Notify(interrupt, os.Interrupt)
-
-	u := url.URL{Scheme: host.Scheme, Host: host.Market, Path: host.MarketPath} // static Market and MarketPath rn
-	log.Printf("connecting to %s", u.String())
-
-	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
-	if err != nil {
-		log.Fatal("dial:", err)
-	}
-	defer c.Close()
-
-	done := make(chan struct{})
-
-	go func() {
-		defer close(done)
-		for {
-			_, message, err := c.ReadMessage()
-			if err != nil {
-				log.Println("read:", err)
-				return
-			}
-			log.Printf("recv: %s", message)
-		}
-	}()
-
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-done:
-			return
-		case t := <-ticker.C:
-			err := c.WriteMessage(websocket.TextMessage, []byte(t.String()))
-			if err != nil {
-				log.Println("write:", err)
-				return
-			}
-		case <-interrupt:
-			log.Println("interrupt")
-
-			// Cleanly close the connection by sending a close message and then
-			// waiting (with timeout) for the server to close the connection.
-			err := c.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
-			if err != nil {
-				log.Println("write close:", err)
-				return
-			}
-			select {
-			case <-done:
-			case <-time.After(time.Second):
-			}
-			return
-		}
-	}
+	GetPlatform() Platform
+	Decode([]byte) Response
+	Encode(Request) []byte
+	Ping(Response) bool
+	PongMessage(int) []byte
+	PongHandler(int, *websocket.Conn)
+	SubscriptionMessage([]string) []byte
 }
