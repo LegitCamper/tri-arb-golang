@@ -1,11 +1,14 @@
 package crypto
 
 // https://exchange-docs.crypto.com/exchange/v1/rest-ws/index.html#introduction
+
 import (
 	"tri-arb/internal/platforms"
 )
 
-func Crypto(sandbox bool) platforms.Platform {
+type Crypto platforms.Platform
+
+func New(sandbox bool) Crypto {
 	var host platforms.Host
 	if !sandbox {
 		host = platforms.Host{
@@ -27,8 +30,9 @@ func Crypto(sandbox bool) platforms.Platform {
 		}
 	}
 
-	return platforms.Platform{
-		Host: host,
-	}
+	return Crypto{Host: host}
+}
 
+func (c Crypto) Get_platform() platforms.Platform {
+	return platforms.Platform{Host: c.Host}
 }

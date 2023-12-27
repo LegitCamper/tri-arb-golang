@@ -6,5 +6,5 @@ import (
 )
 
 func main() {
-	platforms.Create(crypto.Crypto)
+	platforms.Create(crypto.New(true))
 }

@@ -23,13 +23,14 @@ type Platform struct {
 	Host Host
 }
 
-type platform func(bool) Platform
+type Broker interface {
+	Get_platform() Platform
+}
 
 // Create one of a few platforms
-func Create(function platform) {
-	platform := function(true) // static sandbox
-	host := platform.Host
+func Create(b Broker) {
 	log.SetFlags(0)
+	host := b.Get_platform().Host
 
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
