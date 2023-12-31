@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"log"
 	"net/url"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -15,7 +17,7 @@ import (
 
 // Websocket implementations
 
-type Request struct {
+type WebsocketRequest struct {
 	Id      int            `json:"id"`
 	Method  string         `json:"method"`
 	Params  *RequestParams `json:"params,omitempty"`
@@ -29,49 +31,63 @@ type RequestParams struct {
 	BookUpdateFrequency  int      `json:"book_update_frequency,omitempty"`
 }
 
-func (r Request) ToJson() []byte {
+func (r WebsocketRequest) ToJson() []byte {
 	s, err := json.Marshal(&r)
 	if err != nil {
 		log.Println("error:", err)
 	}
 	return s
 }
-func (r Request) Timestamp() int64 {
+func (r WebsocketRequest) Timestamp() int64 {
 	return time.Now().UnixMilli()
 }
-func (r Request) AddTimestamp() {
+func (r WebsocketRequest) AddTimestamp() {
 	r.Nonce = r.Timestamp()
 }
 
-type Response struct {
-	Id       int              `json:"id"`
-	Method   string           `json:"method"`
-	Result   *ResponseResults `json:"reslult,omitempty"`
-	Code     int              `json:"code,omitempty"`
-	Message  string           `json:"message,omitempty"`
-	Original string           `json:"original,omitempty"`
+type WebsocketResponse struct {
+	Id       int                      `json:"id"`
+	Method   string                   `json:"method"`
+	Result   WebsocketResponseResults `json:"result,omitempty"`
+	Code     int                      `json:"code,omitempty"`
+	Message  string                   `json:"message,omitempty"`
+	Original string                   `json:"original,omitempty"`
 }
-type ResponseResults struct {
-	Instrument_name string                 `json:"instrument_name,omitempty"`
-	Subscription    string                 `json:"subscription,omitempty"`
-	Channel         string                 `json:"channel,omitempty"`
-	Depth           uint                   `json:"depth,omitempty"`
-	Data            []*ResponseResultsData `json:"data"`
+type WebsocketResponseResults struct {
+	Instrument_name string                         `json:"instrument_name,omitempty"`
+	Subscription    string                         `json:"subscription,omitempty"`
+	Channel         string                         `json:"channel,omitempty"`
+	Depth           uint                           `json:"depth,omitempty"`
+	Data            []WebsocketResponseResultsData `json:"data"`
 }
-type ResponseResultsData struct {
-	Asks [][3]float32 `json:"asks,omitempty"`
-	Bids [][3]float32 `json:"bids,omitempty"`
-	T    int          `json:"t,omitempty"`
-	Tt   int          `json:"tt,omitempty"`
-	U    int          `json:"U,omitempty"`
+type WebsocketResponseResultsData struct {
+	Update *WebsocketResponseResultsData `json:"update"`
+	Asks   [][3]string                   `json:"asks"`
+	Bids   [][3]string                   `json:"bids"`
+	T      int                           `json:"t"`
+	Tt     int                           `json:"tt"`
+	U      int                           `json:"u"`
+	Pu     int                           `json:"pu,omitempty"`
+
+	// Not in actual response - just for simplicity
+	Symbol string
 }
 
-func (r Response) GetMethod() string {
+func (r WebsocketResponse) GetMethod() string {
 	return r.Method
 }
 
-func (r Response) GetId() int {
+func (r WebsocketResponse) GetId() int {
 	return r.Id
+}
+
+func (r WebsocketResponse) GetMarketData() interface{} {
+	if len(r.Result.Data) >= 1 {
+		// this is a list!!!! but seems to only ever have 1 element
+		r.Result.Data[0].Symbol = r.Result.Instrument_name
+		return r.Result.Data[0]
+	}
+	return nil
 }
 
 type Crypto platforms.Platform
@@ -117,12 +133,12 @@ func (c Crypto) GetPlatform() platforms.Platform {
 	}
 }
 
-func (c Crypto) Encode(r platforms.Request) []byte {
+func (c Crypto) Encode(r platforms.WebsocketRequest) []byte {
 	return []byte(r.ToJson())
 }
 
-func (c Crypto) Decode(b []byte) platforms.Response {
-	var response Response
+func (c Crypto) Decode(b []byte) platforms.WebsocketResponse {
+	var response WebsocketResponse
 	err := json.Unmarshal([]byte(b), &response)
 	if err != nil {
 		log.Println("error:", err)
@@ -130,12 +146,12 @@ func (c Crypto) Decode(b []byte) platforms.Response {
 	return response
 }
 
-func (c Crypto) Ping(r platforms.Response) bool {
+func (c Crypto) Ping(r platforms.WebsocketResponse) bool {
 	return r.GetMethod() == "public/heartbeat"
 }
 
 func (c Crypto) PongMessage(id int) []byte {
-	return Request{Id: id, Method: "public/respond-heartbeat"}.ToJson()
+	return WebsocketRequest{Id: id, Method: "public/respond-heartbeat"}.ToJson()
 }
 
 func (c Crypto) PongHandler(id int, ws *websocket.Conn) {
@@ -147,13 +163,13 @@ func (c Crypto) PongHandler(id int, ws *websocket.Conn) {
 }
 
 func (c Crypto) SubscriptionMessage(list []string) []byte {
-	return Request{
+	return WebsocketRequest{
 		Id:     -1,
 		Method: "subscribe",
 		Params: &RequestParams{
 			Channels:             list,
-			BookSubscriptionType: "SNAPSHOT",
-			BookUpdateFrequency:  100,
+			BookSubscriptionType: "SNAPSHOT_AND_UPDATE",
+			BookUpdateFrequency:  10,
 		},
 	}.ToJson()
 }
@@ -191,6 +207,68 @@ func (c Crypto) MakeUrl(s string) url.URL {
 }
 
 func (c Crypto) DownloadSymbols() []string {
-	log.Println(platforms.RestGet(c, "https://api.crypto.com/exchange/v1/{method}"))
+	// log.Println(platforms.RestGet(c, "https://api.crypto.com/exchange/v1/{method}"))
 	return []string{""}
+}
+func (c Crypto) DecodeSymbols(string) {
+
+}
+
+func (c Crypto) ProccessMarketData(
+	platform *platforms.PlatformApi,
+) {
+	// Runs for the lifetime of the program
+	for data := range platform.Market_conn {
+		new_market_data := data.GetMarketData()
+		if new_market_data == nil {
+			return
+		}
+		r, ok := new_market_data.(WebsocketResponseResultsData) // Coerce interface back into ResponseResultsData
+		if !ok {
+			log.Println("Error: invalid type assertion")
+			panic("")
+		}
+		symbol := r.Symbol
+		// There are two types of data here snapshots and updates
+		if r.Update == nil {
+			// snapshots
+			market_data := *platform.MarketData.Symbol[symbol]
+			for _, e := range r.Asks {
+				float0, _ := strconv.ParseFloat(strings.TrimSpace(e[0]), 64)
+				float1, _ := strconv.ParseFloat(strings.TrimSpace(e[1]), 64)
+				new_e := [2]float64{float0, float1}
+				market_data.Asks = append(market_data.Asks, new_e)
+			}
+			for _, e := range r.Bids {
+				float0, _ := strconv.ParseFloat(strings.TrimSpace(e[0]), 64)
+				float1, _ := strconv.ParseFloat(strings.TrimSpace(e[1]), 64)
+				new_e := [2]float64{float0, float1}
+				market_data.Bids = append(market_data.Bids, new_e)
+			}
+			market_data.Id = r.U
+		} else {
+			// updates
+			if r.Pu == platform.MarketData.Symbol[symbol].Id {
+				market_data := *platform.MarketData.Symbol[symbol]
+				for _, e := range r.Update.Asks {
+					float0, _ := strconv.ParseFloat(strings.TrimSpace(e[0]), 64)
+					float1, _ := strconv.ParseFloat(strings.TrimSpace(e[1]), 64)
+					new_e := [2]float64{float0, float1}
+					market_data.Asks = append(market_data.Asks, new_e)
+				}
+				for _, e := range r.Update.Bids {
+					float0, _ := strconv.ParseFloat(strings.TrimSpace(e[0]), 64)
+					float1, _ := strconv.ParseFloat(strings.TrimSpace(e[1]), 64)
+					new_e := [2]float64{float0, float1}
+					market_data.Bids = append(market_data.Bids, new_e)
+				}
+				market_data.Id = r.U
+			} else {
+				// TODO: download book via rest here
+				log.Println("Existing id and new id dont match. Removing broken book")
+				platform.MarketData = platforms.PlatformMarketData{Symbol: make(map[string]*platforms.PlatformMarketDataSymbol)}
+			}
+		}
+	}
+	panic("Websocket Market Channel closed")
 }

@@ -9,7 +9,7 @@ import (
 )
 
 // Create one of a few platforms
-func platform_websocket(b Broker, u url.URL, subscriptions []string, channel chan<- Response) { //*websocket.Conn
+func platform_websocket(b Broker, u url.URL, subscriptions []string, channel chan<- WebsocketResponse) { //*websocket.Conn
 	log.Printf("connecting to %s", u.String())
 
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
@@ -35,8 +35,6 @@ func platform_websocket(b Broker, u url.URL, subscriptions []string, channel cha
 			log.Println("ReadMessage() error:", err)
 			panic("")
 		}
-		log.Printf("got: %s", message) // TODO: Remove
-
 		if message_type == websocket.TextMessage {
 			d_message := b.Decode(message)
 			// If ping is seen handle pong
@@ -49,25 +47,22 @@ func platform_websocket(b Broker, u url.URL, subscriptions []string, channel cha
 	}
 }
 
-type Platform_api struct {
-	User_conn   chan Response
-	Market_conn chan Response
-	Platform    Platform
-}
-
 // platform_websocket Handler
-func Handler(b Broker) Platform_api {
+func Handler(b Broker) PlatformApi {
 	websocket_host := b.GetPlatform().WebsocketHost
 
-	user_conn := make(chan Response)
-	market_conn := make(chan Response)
+	user_conn := make(chan WebsocketResponse)
+	market_conn := make(chan WebsocketResponse)
 
 	go platform_websocket(b, url.URL{Scheme: websocket_host.Scheme, Host: websocket_host.User, Path: websocket_host.UserPath}, websocket_host.UserSubs, user_conn)
 	go platform_websocket(b, url.URL{Scheme: websocket_host.Scheme, Host: websocket_host.Market, Path: websocket_host.MarketPath}, websocket_host.MarketSubs, market_conn)
 
-	return Platform_api{
+	platform := PlatformApi{
 		User_conn:   user_conn,
 		Market_conn: market_conn,
 		Platform:    Platform{WebsocketHost: websocket_host},
+		MarketData:  PlatformMarketData{Symbol: make(map[string]*PlatformMarketDataSymbol)},
 	}
+
+	return platform
 }

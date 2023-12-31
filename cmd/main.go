@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"tri-arb/internal/detector"
-	// "tri-arb/internal/platforms"
+	"tri-arb/internal/platforms"
 	"tri-arb/internal/platforms/crypto"
 )
 
@@ -15,21 +15,26 @@ func main() {
 }
 
 func start() {
-	crypto.New(true).DownloadSymbols()
+	// this platform call can change
+	platform := crypto.New(true)
+	// platform.DownloadSymbols() // TODO: remove this
+	// time.Sleep(time.Hour)
+
 	// create channels and opens websockets
-	// platform := platforms.Handler(crypto.New(true))
+	platformData := platforms.Handler(platform)
 
-	// func() {
-	// 	for x := range platform.Market_conn {
-	// 		log.Println(x)
-	// 	}
-	// 	for x := range platform.User_conn {
-	// 		log.Println(x)
-	// 	}
-	// }()
+	// Creating go routine to listen to market data via websocket
+	// channel and push data to PlatformApi
+	go platform.ProccessMarketData(&platformData)
 
-	// pass reader to detector and writer for orders
+	go func() {
+		for {
+			log.Println(platformData.MarketData)
+			time.Sleep(time.Second * 5)
+		}
+	}()
+
+	// PlatformData to detector with marketData and writer to create orders
 	detector.Test()
 	time.Sleep(time.Hour)
-
 }
