@@ -35,7 +35,6 @@ func platform_websocket(b Broker, u url.URL, subscriptions []string, channel cha
 			log.Println("ReadMessage() error:", err)
 			panic("")
 		}
-		log.Printf("got %s", time.Now())
 		log.Printf("got: %s", message) // TODO: Remove
 
 		if message_type == websocket.TextMessage {
@@ -63,8 +62,8 @@ func Handler(b Broker) Platform_api {
 	user_conn := make(chan Response)
 	market_conn := make(chan Response)
 
-	go platform_websocket(b, url.URL{Scheme: host.Scheme, Host: host.User, Path: host.UserPath}, host.UserSubs, user_conn)         //	user_sock :=
-	go platform_websocket(b, url.URL{Scheme: host.Scheme, Host: host.Market, Path: host.MarketPath}, host.MarketSubs, market_conn) // market_sock :=
+	go platform_websocket(b, url.URL{Scheme: host.Scheme, Host: host.User, Path: host.UserPath}, host.UserSubs, user_conn)
+	go platform_websocket(b, url.URL{Scheme: host.Scheme, Host: host.Market, Path: host.MarketPath}, host.MarketSubs, market_conn)
 
 	return Platform_api{
 		User_conn:   user_conn,

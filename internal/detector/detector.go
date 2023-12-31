@@ -1,9 +1,13 @@
 package detector
 
 import (
-	"fmt"
+	"log"
 )
 
+// type struct
+
 func Test() {
-	fmt.Println("Hello")
+	log.Println("Hello")
 }
+
+// func ()

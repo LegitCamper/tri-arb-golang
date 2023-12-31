@@ -15,7 +15,7 @@ func main() {
 }
 
 func start() {
-	// create channels
+	// create channels and opens websockets
 	platform := platforms.Handler(crypto.New(true))
 
 	func() {

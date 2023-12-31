@@ -7,9 +7,9 @@ import (
 	"log"
 	"time"
 
-	"tri-arb/internal/platforms"
-
 	"github.com/gorilla/websocket"
+
+	"tri-arb/internal/platforms"
 )
 
 type Request struct {
@@ -21,7 +21,9 @@ type Request struct {
 	Nonce   int64          `json:"nonce,omitempty"`
 }
 type RequestParams struct {
-	Channels []string `json:"channels,omitempty"`
+	Channels             []string `json:"channels,omitempty"`
+	BookSubscriptionType string   `json:"book_subscription_type,omitempty"`
+	BookUpdateFrequency  int      `json:"book_update_frequency,omitempty"`
 }
 
 func (r Request) ToJson() []byte {
@@ -80,7 +82,7 @@ func New(sandbox bool) Crypto {
 			UserSubs:   []string{""},
 			Market:     "stream.crypto.com",
 			MarketPath: "/exchange/v1/market",
-			MarketSubs: []string{"book.BTCUSD-PERP"},
+			MarketSubs: []string{"book.BTCUSD-PERP.50"},
 			Scheme:     "wss",
 		}
 	} else {
@@ -90,7 +92,7 @@ func New(sandbox bool) Crypto {
 			UserSubs:   []string{""},
 			Market:     "uat-stream.3ona.co",
 			MarketPath: "/exchange/v1/market",
-			MarketSubs: []string{"book.BTCUSD-PERP"},
+			MarketSubs: []string{"book.BTCUSD-PERP.50"},
 			Scheme:     "wss",
 		}
 	}
@@ -132,5 +134,13 @@ func (c Crypto) PongHandler(id int, ws *websocket.Conn) {
 }
 
 func (c Crypto) SubscriptionMessage(list []string) []byte {
-	return Request{Id: -1, Method: "subscribe", Params: &RequestParams{Channels: list}}.ToJson()
+	return Request{
+		Id:     -1,
+		Method: "subscribe",
+		Params: &RequestParams{
+			Channels:             list,
+			BookSubscriptionType: "SNAPSHOT",
+			BookUpdateFrequency:  100,
+		},
+	}.ToJson()
 }
