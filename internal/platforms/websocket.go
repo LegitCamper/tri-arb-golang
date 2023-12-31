@@ -57,17 +57,17 @@ type Platform_api struct {
 
 // platform_websocket Handler
 func Handler(b Broker) Platform_api {
-	host := b.GetPlatform().Host
+	websocket_host := b.GetPlatform().WebsocketHost
 
 	user_conn := make(chan Response)
 	market_conn := make(chan Response)
 
-	go platform_websocket(b, url.URL{Scheme: host.Scheme, Host: host.User, Path: host.UserPath}, host.UserSubs, user_conn)
-	go platform_websocket(b, url.URL{Scheme: host.Scheme, Host: host.Market, Path: host.MarketPath}, host.MarketSubs, market_conn)
+	go platform_websocket(b, url.URL{Scheme: websocket_host.Scheme, Host: websocket_host.User, Path: websocket_host.UserPath}, websocket_host.UserSubs, user_conn)
+	go platform_websocket(b, url.URL{Scheme: websocket_host.Scheme, Host: websocket_host.Market, Path: websocket_host.MarketPath}, websocket_host.MarketSubs, market_conn)
 
 	return Platform_api{
 		User_conn:   user_conn,
 		Market_conn: market_conn,
-		Platform:    Platform{Host: host},
+		Platform:    Platform{WebsocketHost: websocket_host},
 	}
 }

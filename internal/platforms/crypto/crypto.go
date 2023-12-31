@@ -5,12 +5,15 @@ package crypto
 import (
 	"encoding/json"
 	"log"
+	"net/url"
 	"time"
 
 	"github.com/gorilla/websocket"
 
 	"tri-arb/internal/platforms"
 )
+
+// Websocket implementations
 
 type Request struct {
 	Id      int            `json:"id"`
@@ -74,9 +77,10 @@ func (r Response) GetId() int {
 type Crypto platforms.Platform
 
 func New(sandbox bool) Crypto {
-	var host platforms.Host
+	var websocket_host platforms.WebsocketHost
+	var rest_host platforms.RestHost
 	if !sandbox {
-		host = platforms.Host{
+		websocket_host = platforms.WebsocketHost{
 			User:       "stream.crypto.com",
 			UserPath:   "/exchange/v1/user",
 			UserSubs:   []string{""},
@@ -85,8 +89,9 @@ func New(sandbox bool) Crypto {
 			MarketSubs: []string{"book.BTCUSD-PERP.50"},
 			Scheme:     "wss",
 		}
+		rest_host = platforms.RestHost{}
 	} else {
-		host = platforms.Host{
+		websocket_host = platforms.WebsocketHost{
 			User:       "uat-stream.3ona.co",
 			UserPath:   "/exchange/v1/user",
 			UserSubs:   []string{""},
@@ -95,13 +100,21 @@ func New(sandbox bool) Crypto {
 			MarketSubs: []string{"book.BTCUSD-PERP.50"},
 			Scheme:     "wss",
 		}
+		rest_host = platforms.RestHost{}
 	}
 
-	return Crypto{Host: host}
+	return Crypto{
+		Sandbox:       sandbox,
+		WebsocketHost: websocket_host,
+		RestHost:      rest_host,
+	}
 }
 
 func (c Crypto) GetPlatform() platforms.Platform {
-	return platforms.Platform{Host: c.Host}
+	return platforms.Platform{
+		WebsocketHost: c.WebsocketHost,
+		RestHost:      c.RestHost,
+	}
 }
 
 func (c Crypto) Encode(r platforms.Request) []byte {
@@ -143,4 +156,41 @@ func (c Crypto) SubscriptionMessage(list []string) []byte {
 			BookUpdateFrequency:  100,
 		},
 	}.ToJson()
+}
+
+// Rest implementations
+
+type rest struct {
+	Result restResult `json:"result,omitempty"`
+}
+type restResult struct {
+	Currencymap map[string]*restCurrencyMap `json:"currency_map,omitempty"`
+}
+type restCurrencyMap struct {
+	Fullname    string             `json:"full_name,omitempty"`
+	NetworkList []*restNetworkList `json:"network_list,omitempty"`
+}
+type restNetworkList struct {
+	Networkid string `json:"network_id,omitempty"`
+	// WithdrawalFee        null   `json:"withdrawal_fee,omitempty"`
+	WithdrawEnabled      bool    `json:"withdraw_endabled,omitempty"`
+	MinWithdrawalAmount  float64 `json:"min_withdrawal_amount,omitempty"`
+	DepositEnabled       bool    `json:"deposit_enabled,omitempty"`
+	ConfirmationRequired int     `json:"confirmation_required ,omitempty"`
+}
+
+func (c Crypto) MakeUrl(s string) url.URL {
+	var domain string
+	if c.Sandbox {
+		domain = c.RestHost.Api
+	} else {
+		domain = c.RestHost.SandboxApi
+	}
+
+	return url.URL{Scheme: c.RestHost.Api, Host: domain, Path: s}
+}
+
+func (c Crypto) DownloadSymbols() []string {
+	log.Println(platforms.RestGet(c, "https://api.crypto.com/exchange/v1/{method}"))
+	return []string{""}
 }
