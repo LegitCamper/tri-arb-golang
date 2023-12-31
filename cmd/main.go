@@ -17,8 +17,8 @@ func main() {
 func start() {
 	// this platform call can change
 	platform := crypto.New(true)
-	// platform.DownloadSymbols() // TODO: remove this
-	// time.Sleep(time.Hour)
+	platform.DownloadSymbols() // TODO: remove this
+	time.Sleep(time.Hour)
 
 	// create channels and opens websockets
 	platformData := platforms.Handler(platform)

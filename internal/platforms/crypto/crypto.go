@@ -105,7 +105,7 @@ func New(sandbox bool) Crypto {
 			MarketSubs: []string{"book.BTCUSD-PERP.50"},
 			Scheme:     "wss",
 		}
-		rest_host = platforms.RestHost{}
+		rest_host = platforms.RestHost{Scheme: "https://", Api: "api.crypto.com"}
 	} else {
 		websocket_host = platforms.WebsocketHost{
 			User:       "uat-stream.3ona.co",
@@ -116,7 +116,7 @@ func New(sandbox bool) Crypto {
 			MarketSubs: []string{"book.BTCUSD-PERP.50"},
 			Scheme:     "wss",
 		}
-		rest_host = platforms.RestHost{}
+		rest_host = platforms.RestHost{Scheme: "https://", Api: "uat-api.3ona.co"}
 	}
 
 	return Crypto{
@@ -176,13 +176,30 @@ func (c Crypto) SubscriptionMessage(list []string) []byte {
 
 // Rest implementations
 
-type rest struct {
-	Result restResult `json:"result,omitempty"`
+type restRequest struct {
+	Id     int         `json:"id"`
+	Method string      `json:"method"`
+	Params interface{} `json:"params,omitempty"`
+	ApiKey string      `json:"api_key,omitempty"`
+	Sig    string      `json:"sig,omitempty"`
+	Nonce  int         `json:"nonce"`
 }
-type restResult struct {
-	Currencymap map[string]*restCurrencyMap `json:"currency_map,omitempty"`
+
+func (r restRequest) ToJson() []byte {
+	s, err := json.Marshal(&r)
+	if err != nil {
+		log.Println("error:", err)
+	}
+	return s
 }
-type restCurrencyMap struct {
+
+type restResponse struct {
+	Result restResponseResult `json:"result,omitempty"`
+}
+type restResponseResult struct {
+	Currencymap map[string]*restResponseCurrencyMap `json:"currency_map,omitempty"`
+}
+type restResponseCurrencyMap struct {
 	Fullname    string             `json:"full_name,omitempty"`
 	NetworkList []*restNetworkList `json:"network_list,omitempty"`
 }
@@ -196,27 +213,25 @@ type restNetworkList struct {
 }
 
 func (c Crypto) MakeUrl(s string) url.URL {
-	var domain string
-	if c.Sandbox {
-		domain = c.RestHost.Api
-	} else {
-		domain = c.RestHost.SandboxApi
-	}
-
-	return url.URL{Scheme: c.RestHost.Api, Host: domain, Path: s}
+	return url.URL{Scheme: c.RestHost.Scheme, Host: c.RestHost.Api, Path: s}
 }
 
 func (c Crypto) DownloadSymbols() []string {
-	// log.Println(platforms.RestGet(c, "https://api.crypto.com/exchange/v1/{method}"))
+	log.Println(platforms.RestGet(c, "/exchange/v1/private/get-currency-networks", restRequest{}))
 	return []string{""}
 }
-func (c Crypto) DecodeSymbols(string) {
-
+func (c Crypto) DecodeSymbols(s string) platforms.RestResponse {
+	var response restResponse
+	{
+		err := json.Unmarshal([]byte(s), &response)
+		if err != nil {
+			log.Println("error:", err)
+		}
+	}
+	return response
 }
 
-func (c Crypto) ProccessMarketData(
-	platform *platforms.PlatformApi,
-) {
+func (c Crypto) ProccessMarketData(platform *platforms.PlatformApi) {
 	// Runs for the lifetime of the program
 	for data := range platform.Market_conn {
 		new_market_data := data.GetMarketData()

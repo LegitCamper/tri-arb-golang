@@ -23,9 +23,8 @@ type WebsocketHost struct {
 	Scheme     string
 }
 type RestHost struct {
-	SandboxApi string
-	Api        string
-	Scheme     string
+	Api    string
+	Scheme string
 	// limits
 }
 
@@ -41,7 +40,8 @@ type WebsocketRequest interface {
 	AddTimestamp()
 }
 
-type RestResponse interface{}
+type RestResponse interface {
+}
 type RestRequest interface {
 	ToJson() []byte
 }
@@ -76,5 +76,5 @@ type Broker interface {
 	// Rest functions
 	MakeUrl(string) url.URL
 	DownloadSymbols() []string
-	DecodeSymbols(string)
+	DecodeSymbols(string) RestResponse
 }

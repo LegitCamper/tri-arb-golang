@@ -7,11 +7,11 @@ import (
 	"github.com/go-resty/resty/v2"
 )
 
-func RestGet(b Broker, s string) string {
+func RestGet(b Broker, path string, req RestRequest) RestResponse {
 	client := resty.New().
 		SetJSONUnmarshaler(json.Unmarshal)
 
-	url := b.MakeUrl(s)
+	url := b.MakeUrl(path)
 	resp, err := client.R().
 		EnableTrace().
 		Get(url.Scheme + url.Host + url.Path)
@@ -19,12 +19,6 @@ func RestGet(b Broker, s string) string {
 		log.Println("error:", err)
 	}
 	log.Printf("resp: %s", resp)
-	return resp.String()
 
-	// var response rest
-	// err := json.Unmarshal([]byte(resp), &response)
-	// if err != nil {
-	// 	log.Println("error:", err)
-	// }
-
+	return b.DecodeSymbols(resp.String())
 }
